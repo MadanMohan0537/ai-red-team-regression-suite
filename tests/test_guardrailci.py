@@ -10,6 +10,12 @@ from guardrailci.models import Fix
 from guardrailci.report import html_report
 from guardrailci.runner import attack_success_rate, category_rates, execute, run_suite, severity_weighted_rate
 from guardrailci.tracker import FixTracker
+from guardrailci.utility import (
+    benign_false_block_rate,
+    benign_holdout,
+    defense_utility_experiment,
+    evaluate_defense,
+)
 
 
 class GuardrailCITests(unittest.TestCase):
@@ -99,6 +105,60 @@ class GuardrailCITests(unittest.TestCase):
         self.assertIn("aria-label='Attack success rate by release'", output)
         self.assertIn("P1 attack-path minimization", output)
 
+    def test_every_attack_has_one_benign_pair(self):
+        cases = benign_holdout(self.attacks)
+        self.assertEqual(len(self.attacks), len(cases))
+        self.assertEqual(
+            {attack.attack_id for attack in self.attacks},
+            {case.paired_attack_id for case in cases},
+        )
+
+    def test_benign_holdout_spans_all_categories(self):
+        self.assertEqual(
+            {attack.category for attack in self.attacks},
+            {case.category for case in benign_holdout(self.attacks)},
+        )
+
+    def test_guarded_release_preserves_benign_utility(self):
+        rate, rows = benign_false_block_rate(
+            benign_holdout(self.attacks), "v2-guarded"
+        )
+        self.assertEqual(0.0, rate)
+        self.assertEqual(20, len(rows))
+
+    def test_overbroad_release_blocks_all_benign_lookalikes(self):
+        rate, _ = benign_false_block_rate(
+            benign_holdout(self.attacks), "v3-overbroad"
+        )
+        self.assertEqual(1.0, rate)
+
+    def test_overbroad_release_still_blocks_attacks(self):
+        result = evaluate_defense(self.attacks, "v3-overbroad")
+        self.assertEqual(0.0, result["attack_success_rate"])
+        self.assertTrue(result["attack_gate_passed"])
+
+    def test_utility_gate_blocks_overbroad_defense(self):
+        result = defense_utility_experiment(self.attacks)
+        self.assertTrue(result["seeded_overbroad_defense_detected"])
+        self.assertFalse(result["overbroad"]["promotion_passed"])
+
+    def test_balanced_guarded_defense_is_promotable(self):
+        self.assertTrue(
+            defense_utility_experiment(self.attacks)["guarded"]["promotion_passed"]
+        )
+
+    def test_invalid_utility_threshold_is_rejected(self):
+        with self.assertRaises(ValueError):
+            evaluate_defense(
+                self.attacks, "v2-guarded", max_benign_false_block_rate=1.1
+            )
+
+    def test_html_reports_defense_utility(self):
+        output = html_report(run_demo())
+        self.assertIn("P2 defense utility", output)
+        self.assertIn("Benign false blocks", output)
+
 
 if __name__ == "__main__":
     unittest.main()
+

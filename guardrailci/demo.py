@@ -5,6 +5,7 @@ from .minimizer import minimize
 from .models import Fix
 from .runner import attack_success_rate, category_rates, run_suite, severity_weighted_rate
 from .tracker import FixTracker
+from .utility import defense_utility_experiment
 
 
 def run_demo() -> dict:
@@ -42,4 +43,6 @@ def run_demo() -> dict:
             "all_reproduced": all(item[1]["reproduced"] for item in minimized),
             "details": [{"attack_id": item.attack_id, **metrics} for item, metrics in minimized],
         },
+        "defense_utility": defense_utility_experiment(attacks),
     }
+

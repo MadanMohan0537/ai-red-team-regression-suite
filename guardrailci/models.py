@@ -41,3 +41,12 @@ class Fix:
     issue: str
     target_release: str
     status: str = "open"
+
+
+@dataclass(frozen=True)
+class BenignCase:
+    case_id: str
+    paired_attack_id: str
+    category: str
+    prompt: str
+
